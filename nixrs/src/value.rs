@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ptr::null_mut};
 
 use std::ffi::CString;
-use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_get_bool, nix_get_float, nix_get_int, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
+use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_get_attr_byidx, nix_get_attr_byname, nix_get_attrs_size, nix_get_bool, nix_get_float, nix_get_int, nix_get_list_byidx, nix_get_list_size, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
 
 use crate::utils::string_from_c;
 use crate::{context::Context, state::State, utils::{NixRSError, Result}};
@@ -215,7 +215,53 @@ impl Value {
     Ok(path)
   }
 
-  // TODO: attrs_get attrs_iter list_get list_iter apply
+  pub fn attrs_len(&mut self) -> Result<usize> {
+    let size = unsafe {
+      let size = nix_get_attrs_size(self.ctx.ctx, self.value);
+      self.ctx.check()?;
+      size as usize
+    };
+    Ok(size)
+  }
+
+  pub fn attrs_get_byname(&mut self, state: &State, name: &str) -> Result<Value> {
+    let value = unsafe {
+      let name = CString::new(name).map_err(|_| NixRSError::UnknownError)?;
+      let value = nix_get_attr_byname(self.ctx.ctx, self.value, state.state, name.as_ptr());
+      drop(name);
+      self.ctx.check()?;
+      Value::from_raw(value)
+    };
+    Ok(value)
+  }
+
+  pub fn attrs_get_byid(&mut self, state: &State, id: usize) -> Result<(String, Value)> {
+    let value = unsafe {
+      let mut name: *const libc::c_char = null_mut();
+      let value = nix_get_attr_byidx(self.ctx.ctx, self.value, state.state, id as u32, &mut name as *mut *const _);
+      self.ctx.check()?;
+      (string_from_c(name)?, Value::from_raw(value))
+    };
+    Ok(value)
+  }
+
+  pub fn list_len(&mut self) -> Result<usize> {
+    let size = unsafe {
+      let size = nix_get_list_size(self.ctx.ctx, self.value);
+      self.ctx.check()?;
+      size as usize
+    };
+    Ok(size)
+  }
+
+  pub fn list_get(&mut self, state: &State, id: usize) -> Result<Value> {
+    let value = unsafe {
+      let value = nix_get_list_byidx(self.ctx.ctx, self.value, state.state, id as u32);
+      self.ctx.check()?;
+      Value::from_raw(value)
+    };
+    Ok(value)
+  }
 }
 
 impl Drop for Value {

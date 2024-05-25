@@ -13,7 +13,7 @@ mod value;
 fn main() {
   init().unwrap();
   let mut state = State::new(Store::new("daemon").unwrap()).unwrap();
-  let two = state.eval("1 + 1").unwrap().int().unwrap();
+  let two = state.eval("{ a = 114; b = 514; }").unwrap().attrs_len().unwrap();
   dbg!(two);
 }
 
