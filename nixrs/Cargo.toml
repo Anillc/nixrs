@@ -3,10 +3,10 @@ name = "nixrs"
 version = "0.1.0"
 edition = "2021"
 
-description = "WIP"
+description = "nix bibnding for rust"
 license = "MIT"
 
 [dependencies]
 libc = "0.2.155"
-nixrs-sys = { path = "../nixrs-sys" }
+nixrs-sys = { version = "0.1.0", path = "../nixrs-sys" }
 thiserror = "1.0.61"
