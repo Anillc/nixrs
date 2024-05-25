@@ -3,6 +3,9 @@ name = "nix-rs-sys"
 version = "0.1.0"
 edition = "2021"
 
+description = "nix bindings for Rust"
+license = "MIT"
+
 [dependencies]
 
 [build-dependencies]
