@@ -50,11 +50,8 @@ impl Value {
     Ok(Value { ctx, value })
   }
 
-  pub(crate) unsafe fn from_raw(value: *mut nixrs_sys::Value) -> Result<Value> {
-    let ctx = Context::new();
-    nix_gc_incref(ctx.ctx, value);
-    NixRSError::from_raw(&ctx)?;
-    Ok(Value { ctx, value })
+  pub(crate) unsafe fn from_raw(value: *mut nixrs_sys::Value) -> Value {
+    Value { ctx: Context::new(), value }
   }
 
   pub fn get_type(&mut self) -> Result<ValueType> {

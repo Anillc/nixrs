@@ -39,11 +39,10 @@ impl State {
     unsafe {
       let expr = CString::new(expr).map_err(|_| NixRSError::UnknownError)?;
       let path = CString::new(path).map_err(|_| NixRSError::UnknownError)?;
-      let value = nix_alloc_value(self.ctx.ctx, self.state); 
+      let value = Value::new(&self)?;
+      nix_expr_eval_from_string(self.ctx.ctx, self.state, expr.as_ptr(), path.as_ptr(), value.value);
       NixRSError::from_raw(&self.ctx)?;
-      nix_expr_eval_from_string(self.ctx.ctx, self.state, expr.as_ptr(), path.as_ptr(), value);
-      NixRSError::from_raw(&self.ctx)?;
-      Value::from_raw(value)
+      Ok(value)
     }
   }
 }
