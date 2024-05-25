@@ -1,5 +1,10 @@
+use crate::store::Store;
+
+mod utils;
 mod context;
+mod store;
 
 fn main() {
-    println!("Hello, world!");
+    let store = Store::new("daemon").unwrap();
+    dbg!(store);
 }
