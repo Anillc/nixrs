@@ -7,3 +7,4 @@ description = "WIP"
 license = "MIT"
 
 [dependencies]
+nixrs-sys = { path = "../nixrs-sys" }
