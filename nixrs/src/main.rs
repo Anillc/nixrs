@@ -1,6 +1,6 @@
 use context::Context;
 use nixrs_sys::{nix_libexpr_init, nix_libstore_init, nix_libutil_init};
-use utils::{NixRSError, Result};
+use utils::Result;
 
 use crate::{state::State, store::Store};
 
@@ -18,14 +18,14 @@ fn main() {
 }
 
 pub fn init() -> Result<()> {
-  let ctx = Context::new();
+  let mut ctx = Context::new();
   unsafe {
     nix_libutil_init(ctx.ctx);
-    NixRSError::from_raw(&ctx)?;
+    ctx.check()?;
     nix_libstore_init(ctx.ctx);
-    NixRSError::from_raw(&ctx)?;
+    ctx.check()?;
     nix_libexpr_init(ctx.ctx);
-    NixRSError::from_raw(&ctx)?;
+    ctx.check()?;
   }
   Ok(())
 }

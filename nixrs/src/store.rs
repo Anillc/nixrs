@@ -12,11 +12,11 @@ pub struct Store {
 
 impl Store {
   pub fn new(uri: &str) -> Result<Store> {
-    let ctx = Context::new();
+    let mut ctx = Context::new();
     let store = unsafe {
       let uri = CString::new(uri).map_err(|_| NixRSError::UnknownError)?;
       let store = nix_store_open(ctx.ctx, uri.as_ptr(), null_mut());
-      NixRSError::from_raw(&ctx)?;
+      ctx.check()?;
       drop(uri);
       store
     };

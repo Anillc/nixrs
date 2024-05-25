@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ptr::null_mut};
 
 use std::ffi::CString;
-use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_gc_incref, nix_get_bool, nix_get_float, nix_get_int, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
+use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_get_bool, nix_get_float, nix_get_int, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
 
 use crate::utils::string_from_c;
 use crate::{context::Context, state::State, utils::{NixRSError, Result}};
@@ -41,10 +41,10 @@ pub struct Value {
 
 impl Value {
   pub fn new(state: &State) -> Result<Value> {
-    let ctx = Context::new();
+    let mut ctx = Context::new();
     let value = unsafe {
       let value = nix_alloc_value(ctx.ctx, state.state);
-      NixRSError::from_raw(&ctx)?;
+      ctx.check()?;
       value
     };
     Ok(Value { ctx, value })
@@ -57,7 +57,7 @@ impl Value {
   pub fn get_type(&mut self) -> Result<ValueType> {
     let ty = unsafe {
       let ty = nix_get_type(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       ty
     };
     ValueType::from_raw(ty)
@@ -66,7 +66,7 @@ impl Value {
   pub fn init_thunk(&mut self, f: &Value, arg: &Value) -> Result<()> {
     unsafe {
       nix_init_apply(self.ctx.ctx, self.value, f.value, arg.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -74,7 +74,7 @@ impl Value {
   pub fn init_int(&mut self, value: i64) -> Result<()> {
     unsafe {
       nix_init_int(self.ctx.ctx, self.value, value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -82,7 +82,7 @@ impl Value {
   pub fn init_float(&mut self, value: f64) -> Result<()> {
     unsafe {
       nix_init_float(self.ctx.ctx, self.value, value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -90,7 +90,7 @@ impl Value {
   pub fn init_bool(&mut self, value: bool) -> Result<()> {
     unsafe {
       nix_init_bool(self.ctx.ctx, self.value, value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -99,7 +99,7 @@ impl Value {
     let value = CString::new(value).map_err(|_| NixRSError::UnknownError)?;
     unsafe {
       nix_init_string(self.ctx.ctx, self.value, value.as_ptr());
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     drop(value);
     Ok(())
@@ -109,7 +109,7 @@ impl Value {
     let value = CString::new(value).map_err(|_| NixRSError::UnknownError)?;
     unsafe {
       nix_init_path_string(self.ctx.ctx, state.state, self.value, value.as_ptr());
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     drop(value);
     Ok(())
@@ -118,7 +118,7 @@ impl Value {
   pub fn init_null(&mut self) -> Result<()> {
     unsafe {
       nix_init_null(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -126,7 +126,7 @@ impl Value {
   pub fn init_attrs(&mut self, state: &State, values: HashMap<String, &Value>) -> Result<()> {
     unsafe {
       let builder = nix_make_bindings_builder(self.ctx.ctx, state.state, values.len());
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       for (name, value) in values {
         let name = match CString::new(name) {
           Ok(name) => name,
@@ -137,14 +137,14 @@ impl Value {
         };
         nix_bindings_builder_insert(self.ctx.ctx, builder, name.as_ptr(), value.value);
         drop(name);
-        if let err@Err(_) = NixRSError::from_raw(&self.ctx) {
+        if let err@Err(_) = self.ctx.check() {
           nix_bindings_builder_free(builder);
           return err;
         }
       }
       nix_make_attrs(self.ctx.ctx, self.value, builder);
       nix_bindings_builder_free(builder);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -152,17 +152,17 @@ impl Value {
   pub fn init_list(&mut self, state: &State, values: &[&Value]) -> Result<()> {
     unsafe {
       let builder = nix_make_list_builder(self.ctx.ctx, state.state, values.len());
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       for (i, value) in values.iter().enumerate() {
         nix_list_builder_insert(self.ctx.ctx, builder, i as u32, value.value);
-        if let err@Err(_) = NixRSError::from_raw(&self.ctx) {
+        if let err@Err(_) = self.ctx.check() {
           nix_list_builder_free(builder);
           return err;
         }
       }
       nix_make_list(self.ctx.ctx, builder, self.value);
       nix_list_builder_free(builder);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
     };
     Ok(())
   }
@@ -172,7 +172,7 @@ impl Value {
   pub fn int(&mut self) -> Result<i64> {
     let int = unsafe {
       let int = nix_get_int(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       int
     };
     Ok(int)
@@ -181,7 +181,7 @@ impl Value {
   pub fn float(&mut self) -> Result<f64> {
     let float = unsafe {
       let float = nix_get_float(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       float
     };
     Ok(float)
@@ -190,7 +190,7 @@ impl Value {
   pub fn bool(&mut self) -> Result<bool> {
     let bool = unsafe {
       let bool = nix_get_bool(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       bool
     };
     Ok(bool)
@@ -200,7 +200,7 @@ impl Value {
     let string = unsafe {
       let mut vec: Vec<u8> = Vec::new();
       nix_get_string(self.ctx.ctx, self.value, Some(get_string_cb), &mut vec as *mut _ as *mut _);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       String::from_utf8(vec).map_err(|_| NixRSError::UnknownError)?
     };
     Ok(string)
@@ -209,7 +209,7 @@ impl Value {
   pub fn path(&mut self) -> Result<String> {
     let path = unsafe {
       let path = nix_get_path_string(self.ctx.ctx, self.value);
-      NixRSError::from_raw(&self.ctx)?;
+      self.ctx.check()?;
       string_from_c(path)?
     };
     Ok(path)
