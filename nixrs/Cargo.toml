@@ -7,4 +7,5 @@ description = "WIP"
 license = "MIT"
 
 [dependencies]
+libc = "0.2.155"
 nixrs-sys = { path = "../nixrs-sys" }
