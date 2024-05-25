@@ -1,0 +1,10 @@
+[package]
+name = "nix-rs-sys"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.69.4"
+pkg-config = "0.3.30"
