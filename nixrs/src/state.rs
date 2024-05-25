@@ -5,15 +5,16 @@ use crate::{context::Context, store::Store, utils::{NixRSError, Result}};
 
 #[derive(Debug)]
 pub struct State {
+  _store: Store,
   state: *mut EvalState,
 }
 
 impl State {
-  pub fn new(store: &Store) -> Result<State> {
+  pub fn new(store: Store) -> Result<State> {
     Self::new_paths(store, &[])
   }
 
-  pub fn new_paths(store: &Store, paths: &[&str]) -> Result<State> {
+  pub fn new_paths(store: Store, paths: &[&str]) -> Result<State> {
     let ctx = Context::new();
     let paths: Vec<_> = paths.into_iter()
       .map(|path| CString::new(path.to_string()).map_err(|_| NixRSError::UnknownError))
@@ -25,7 +26,7 @@ impl State {
       NixRSError::from_raw(&ctx)?;
       state
     };
-    Ok(State { state })
+    Ok(State { _store: store, state })
   }
 }
 

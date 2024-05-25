@@ -12,8 +12,8 @@ mod state;
 fn main() {
   init().unwrap();
   let store = Store::new("daemon").unwrap();
-  let state = State::new(&store).unwrap();
-  dbg!(store, state);
+  let state = State::new(store).unwrap();
+  dbg!(state);
 }
 
 pub fn init() -> Result<()> {
