@@ -22,6 +22,7 @@ pub enum NixRSError {
 }
 
 impl NixRSError {
+  // TODO: move to Context
   pub(crate) unsafe fn from_raw(ctx: &Context) -> Result<()> {
     let err = nix_err_code(ctx.ctx);
     if err == NIX_OK as i32 { return Ok(()); }

@@ -8,12 +8,13 @@ mod utils;
 mod context;
 mod store;
 mod state;
+mod value;
 
 fn main() {
   init().unwrap();
-  let store = Store::new("daemon").unwrap();
-  let state = State::new(store).unwrap();
-  dbg!(state);
+  let mut state = State::new(Store::new("daemon").unwrap()).unwrap();
+  let two = state.eval("1 + 1").unwrap().int().unwrap();
+  dbg!(two);
 }
 
 pub fn init() -> Result<()> {
