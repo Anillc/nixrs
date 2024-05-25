@@ -1,10 +1,11 @@
 use std::{ffi::CString, ptr::null};
-use nixrs_sys::{nix_state_create, nix_state_free, EvalState};
+use nixrs_sys::{nix_expr_eval_from_string, nix_state_create, nix_state_free, EvalState};
 
 use crate::{context::Context, store::Store, utils::{NixRSError, Result}};
 
 #[derive(Debug)]
 pub struct State {
+  ctx: Context,
   _store: Store,
   state: *mut EvalState,
 }
@@ -26,7 +27,7 @@ impl State {
       NixRSError::from_raw(&ctx)?;
       state
     };
-    Ok(State { _store: store, state })
+    Ok(State { _store: store, state, ctx })
   }
 }
 

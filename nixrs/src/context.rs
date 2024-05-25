@@ -1,5 +1,6 @@
 use nixrs_sys::{nix_c_context, nix_c_context_create, nix_c_context_free};
 
+#[derive(Debug)]
 pub struct Context {
   pub(crate) ctx: *mut nix_c_context,
 }
