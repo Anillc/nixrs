@@ -7,9 +7,10 @@ pub mod context;
 pub mod store;
 pub mod state;
 pub mod value;
+pub mod path;
 
 pub fn init() -> Result<()> {
-  let mut ctx = Context::new();
+  let ctx = Context::new();
   unsafe {
     nix_libutil_init(ctx.ctx);
     ctx.check()?;

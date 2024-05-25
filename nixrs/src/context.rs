@@ -15,7 +15,7 @@ impl Context {
     Context { ctx }
   }
 
-  pub unsafe fn check(&mut self) -> Result<()> {
+  pub unsafe fn check(&self) -> Result<()> {
     let err = nix_err_code(self.ctx);
     if err == NIX_OK as i32 { return Ok(()); }
     let msg = match string_from_c(nix_err_msg(null_mut(), self.ctx, null_mut())) {

@@ -1,9 +1,9 @@
 use std::{collections::HashMap, ptr::null_mut};
 
 use std::ffi::CString;
-use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_get_attr_byidx, nix_get_attr_byname, nix_get_attrs_size, nix_get_bool, nix_get_float, nix_get_int, nix_get_list_byidx, nix_get_list_size, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
+use nixrs_sys::{nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref, nix_get_attr_byidx, nix_get_attr_byname, nix_get_attrs_size, nix_get_bool, nix_get_float, nix_get_int, nix_get_list_byidx, nix_get_list_size, nix_get_path_string, nix_get_string, nix_get_type, nix_init_apply, nix_init_bool, nix_init_float, nix_init_int, nix_init_null, nix_init_path_string, nix_init_string, nix_list_builder_free, nix_list_builder_insert, nix_make_attrs, nix_make_bindings_builder, nix_make_list, nix_make_list_builder, nix_value_force, nix_value_force_deep, ValueType_NIX_TYPE_ATTRS, ValueType_NIX_TYPE_BOOL, ValueType_NIX_TYPE_EXTERNAL, ValueType_NIX_TYPE_FLOAT, ValueType_NIX_TYPE_FUNCTION, ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL, ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK};
 
-use crate::utils::string_from_c;
+use crate::utils::{get_string_cb, string_from_c};
 use crate::{context::Context, state::State, utils::{NixRSError, Result}};
 
 
@@ -41,7 +41,7 @@ pub struct Value {
 
 impl Value {
   pub fn new(state: &State) -> Result<Value> {
-    let mut ctx = Context::new();
+    let ctx = Context::new();
     let value = unsafe {
       let value = nix_alloc_value(ctx.ctx, state.state);
       ctx.check()?;
@@ -54,13 +54,29 @@ impl Value {
     Value { ctx: Context::new(), value }
   }
 
-  pub fn get_type(&mut self) -> Result<ValueType> {
+  pub fn get_type(&self) -> Result<ValueType> {
     let ty = unsafe {
       let ty = nix_get_type(self.ctx.ctx, self.value);
       self.ctx.check()?;
       ty
     };
     ValueType::from_raw(ty)
+  }
+
+  pub fn force(&mut self, state: &State) -> Result<()> {
+    unsafe {
+      nix_value_force(self.ctx.ctx, state.state, self.value);
+      self.ctx.check()?;
+    };
+    Ok(())
+  }
+
+  pub fn force_deep(&mut self, state: &State) -> Result<()> {
+    unsafe {
+      nix_value_force_deep(self.ctx.ctx, state.state, self.value);
+      self.ctx.check()?;
+    };
+    Ok(())
   }
 
   pub fn init_thunk(&mut self, f: &Value, arg: &Value) -> Result<()> {
@@ -169,7 +185,7 @@ impl Value {
 
   // TODO: function and external
 
-  pub fn int(&mut self) -> Result<i64> {
+  pub fn int(&self) -> Result<i64> {
     let int = unsafe {
       let int = nix_get_int(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -178,7 +194,7 @@ impl Value {
     Ok(int)
   }
 
-  pub fn float(&mut self) -> Result<f64> {
+  pub fn float(&self) -> Result<f64> {
     let float = unsafe {
       let float = nix_get_float(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -187,7 +203,7 @@ impl Value {
     Ok(float)
   }
 
-  pub fn bool(&mut self) -> Result<bool> {
+  pub fn bool(&self) -> Result<bool> {
     let bool = unsafe {
       let bool = nix_get_bool(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -196,7 +212,7 @@ impl Value {
     Ok(bool)
   }
 
-  pub fn string(&mut self) -> Result<String> {
+  pub fn string(&self) -> Result<String> {
     let string = unsafe {
       let mut vec: Vec<u8> = Vec::new();
       nix_get_string(self.ctx.ctx, self.value, Some(get_string_cb), &mut vec as *mut _ as *mut _);
@@ -206,7 +222,7 @@ impl Value {
     Ok(string)
   }
 
-  pub fn path(&mut self) -> Result<String> {
+  pub fn path(&self) -> Result<String> {
     let path = unsafe {
       let path = nix_get_path_string(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -215,7 +231,7 @@ impl Value {
     Ok(path)
   }
 
-  pub fn attrs_len(&mut self) -> Result<usize> {
+  pub fn attrs_len(&self) -> Result<usize> {
     let size = unsafe {
       let size = nix_get_attrs_size(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -224,7 +240,7 @@ impl Value {
     Ok(size)
   }
 
-  pub fn attrs_get_byname(&mut self, state: &State, name: &str) -> Result<Value> {
+  pub fn attrs_get(&self, state: &State, name: &str) -> Result<Value> {
     let value = unsafe {
       let name = CString::new(name).map_err(|_| NixRSError::UnknownError)?;
       let value = nix_get_attr_byname(self.ctx.ctx, self.value, state.state, name.as_ptr());
@@ -235,7 +251,7 @@ impl Value {
     Ok(value)
   }
 
-  pub fn attrs_get_byid(&mut self, state: &State, id: usize) -> Result<(String, Value)> {
+  pub fn attrs_get_byid(&self, state: &State, id: usize) -> Result<(String, Value)> {
     let value = unsafe {
       let mut name: *const libc::c_char = null_mut();
       let value = nix_get_attr_byidx(self.ctx.ctx, self.value, state.state, id as u32, &mut name as *mut *const _);
@@ -245,7 +261,7 @@ impl Value {
     Ok(value)
   }
 
-  pub fn list_len(&mut self) -> Result<usize> {
+  pub fn list_len(&self) -> Result<usize> {
     let size = unsafe {
       let size = nix_get_list_size(self.ctx.ctx, self.value);
       self.ctx.check()?;
@@ -254,7 +270,7 @@ impl Value {
     Ok(size)
   }
 
-  pub fn list_get(&mut self, state: &State, id: usize) -> Result<Value> {
+  pub fn list_get(&self, state: &State, id: usize) -> Result<Value> {
     let value = unsafe {
       let value = nix_get_list_byidx(self.ctx.ctx, self.value, state.state, id as u32);
       self.ctx.check()?;
@@ -262,6 +278,8 @@ impl Value {
     };
     Ok(value)
   }
+
+  // TODO: apply
 }
 
 impl Drop for Value {
@@ -269,10 +287,4 @@ impl Drop for Value {
     // TODO: context?
     unsafe { nix_gc_decref(null_mut(), self.value) };
   }
-}
-
-pub unsafe extern "C" fn get_string_cb(start: *const libc::c_char, n: libc::c_uint, user_data: *mut libc::c_void) {
-    let ret = user_data as *mut Vec<u8>;
-    let slice = std::slice::from_raw_parts(start as *const u8, n as usize);
-    (*ret).extend_from_slice(slice);
 }

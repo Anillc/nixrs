@@ -1,12 +1,12 @@
-use std::{ffi::CString, ptr::null};
-use nixrs_sys::{nix_expr_eval_from_string, nix_state_create, nix_state_free, EvalState};
+use std::{collections::HashMap, ffi::CString, ptr::null};
+use nixrs_sys::{nix_expr_eval_from_string, nix_state_create, nix_state_free, nix_store_realise, EvalState};
 
-use crate::{context::Context, store::Store, utils::{NixRSError, Result}, value::Value};
+use crate::{context::Context, path::StorePath, store::Store, utils::{build_cb, NixRSError, Result}, value::{Value, ValueType}};
 
 #[derive(Debug)]
 pub struct State {
   ctx: Context,
-  _store: Store,
+  pub(crate) store: Store,
   pub(crate) state: *mut EvalState,
 }
 
@@ -16,7 +16,7 @@ impl State {
   }
 
   pub fn new_with_paths(store: Store, paths: &[&str]) -> Result<State> {
-    let mut ctx = Context::new();
+    let ctx = Context::new();
     let paths: Vec<_> = paths.into_iter()
       .map(|path| CString::new(path.to_string()).map_err(|_| NixRSError::UnknownError))
       .collect::<Result<Vec<CString>>>()?;
@@ -28,7 +28,7 @@ impl State {
       state
     };
     drop(paths_c);
-    Ok(State { _store: store, state, ctx })
+    Ok(State { store, state, ctx })
   }
 
   pub fn eval(&mut self, expr: &str) -> Result<Value> {
@@ -44,6 +44,28 @@ impl State {
       self.ctx.check()?;
       Ok(value)
     }
+  }
+
+  pub fn store_path(&mut self, path: &str) -> Result<StorePath> {
+    StorePath::new(&self.store, path)
+  }
+
+  pub fn build(&mut self, value: &Value) -> Result<HashMap<String, String>> {
+    let ValueType::Attrs = value.get_type()? else { return Err(NixRSError::NotDerivation); };
+    let store_path = value.attrs_get(&self, "drvPath")?;
+    let ValueType::String = store_path.get_type()? else { return Err(NixRSError::NotDerivation); };
+    let store_path = StorePath::new(&self.store, store_path.string()?.as_str())?;
+    let map = unsafe {
+      let mut map = HashMap::<String, String>::new();
+      nix_store_realise(
+        self.ctx.ctx, self.store.store, store_path.store_path,
+        &mut map as *mut _ as *mut _,
+        Some(build_cb),
+      );
+      self.ctx.check()?;
+      map
+    };
+    Ok(map)
   }
 }
 
