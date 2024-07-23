@@ -1,12 +1,13 @@
 [package]
 name = "nixrs-sys"
-version = "0.1.0"
-edition = "2021"
 
-description = "nix bindings for Rust"
-license = "MIT"
-
-[dependencies]
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [build-dependencies]
 bindgen = "0.69.4"
