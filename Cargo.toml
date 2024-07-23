@@ -5,3 +5,10 @@ members = [
   "nixrs",
   "example",
 ]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+version = "0.1.0"
+description = "nix bindings for Rust"

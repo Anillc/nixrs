@@ -4,7 +4,7 @@
   in {
     devShells.default = pkgs.mkShell {
       buildInputs = with pkgs; [ nixVersions.latest ];
-      nativeBuildInputs = with pkgs; [ rustPlatform.bindgenHook ];
+      nativeBuildInputs = with pkgs; [ rustc cargo rustPlatform.bindgenHook ];
     };
   });
 }

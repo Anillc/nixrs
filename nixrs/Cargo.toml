@@ -1,12 +1,13 @@
 [package]
 name = "nixrs"
-version = "0.1.0"
-edition = "2021"
 
-description = "nix bibnding for rust"
-license = "MIT"
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 libc = "0.2.155"
 nixrs-sys = { version = "0.1.0", path = "../nixrs-sys" }
-thiserror = "1.0.61"
+thiserror = "1.0.63"
