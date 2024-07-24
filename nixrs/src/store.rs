@@ -1,11 +1,10 @@
-use std::ptr::null_mut;
+use std::{ffi::CString, ptr::null_mut};
 
 use nixrs_sys::{nix_store_free, nix_store_open};
-use std::ffi::CString;
 
 use crate::{
     context::Context,
-    utils::{NixRSError, Result},
+    utils::{Error, Result},
 };
 
 #[derive(Debug)]
@@ -14,16 +13,12 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(uri: &str) -> Result<Store> {
+    pub fn new(uri: &str) -> Result<Self> {
+        let uri = CString::new(uri).map_err(|_| Error::UnknownError)?;
         let ctx = Context::new();
-        let store = unsafe {
-            let uri = CString::new(uri).map_err(|_| NixRSError::UnknownError)?;
-            let store = nix_store_open(ctx.ctx, uri.as_ptr(), null_mut());
-            ctx.check()?;
-            drop(uri);
-            store
-        };
-        Ok(Store { store })
+        let store = ctx.exec(|ctx| unsafe { nix_store_open(ctx, uri.as_ptr(), null_mut()) })?;
+        drop(uri);
+        Ok(Self { store })
     }
 }
 
