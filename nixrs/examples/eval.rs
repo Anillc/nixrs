@@ -1,4 +1,4 @@
-use nixrs::{init, state::State, store::Store};
+use nixrs::{init, State, Store};
 
 fn main() -> anyhow::Result<()> {
     init()?;
