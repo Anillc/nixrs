@@ -2,10 +2,10 @@ use std::{collections::HashMap, ffi::CStr};
 
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, NixRSError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
-pub enum NixRSError {
+pub enum Error {
     #[error("NIX_ERROR_UNKNOWN: {0}")]
     NixErrorUnknown(String),
     #[error("NIX_ERROR_OVERFLOW: {0}")]
@@ -24,7 +24,7 @@ pub(crate) unsafe fn string_from_c(ptr: *const libc::c_char) -> Result<String> {
     CStr::from_ptr(ptr)
         .to_str()
         .map(|str| str.to_string())
-        .map_err(|_| NixRSError::UnknownError)
+        .map_err(|_| Error::UnknownError)
 }
 
 pub(crate) unsafe extern "C" fn get_string_cb(

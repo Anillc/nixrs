@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ptr::null_mut};
+use std::{collections::HashMap, ffi::CString, ptr::null_mut};
 
 use nixrs_sys::{
     nix_alloc_value, nix_bindings_builder_free, nix_bindings_builder_insert, nix_gc_decref,
@@ -12,13 +12,12 @@ use nixrs_sys::{
     ValueType_NIX_TYPE_INT, ValueType_NIX_TYPE_LIST, ValueType_NIX_TYPE_NULL,
     ValueType_NIX_TYPE_PATH, ValueType_NIX_TYPE_STRING, ValueType_NIX_TYPE_THUNK,
 };
-use std::ffi::CString;
 
-use crate::utils::{get_string_cb, string_from_c};
 use crate::{
     context::Context,
     state::State,
-    utils::{NixRSError, Result},
+    utils::{get_string_cb, string_from_c},
+    utils::{Error, Result},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -38,7 +37,7 @@ pub enum ValueType {
 
 impl ValueType {
     #[allow(non_upper_case_globals)]
-    pub(crate) fn from_raw(ty: libc::c_uint) -> Result<ValueType> {
+    pub(crate) fn from_raw(ty: libc::c_uint) -> Result<Self> {
         match ty {
             ValueType_NIX_TYPE_THUNK => Ok(Self::Thunk),
             ValueType_NIX_TYPE_INT => Ok(Self::Int),
@@ -51,7 +50,7 @@ impl ValueType {
             ValueType_NIX_TYPE_LIST => Ok(Self::List),
             ValueType_NIX_TYPE_FUNCTION => Ok(Self::Function),
             ValueType_NIX_TYPE_EXTERNAL => Ok(Self::External),
-            _ => Err(crate::utils::NixRSError::UnknownError),
+            _ => Err(Error::UnknownError),
         }
     }
 }
@@ -63,257 +62,216 @@ pub struct Value {
 }
 
 impl Value {
-    pub fn new(state: &State) -> Result<Value> {
+    pub fn new(state: &State) -> Result<Self> {
         let ctx = Context::new();
-        let value = unsafe {
-            let value = nix_alloc_value(ctx.ctx, state.state);
-            ctx.check()?;
-            value
-        };
-        Ok(Value { ctx, value })
+        let value = ctx.exec(|ctx| unsafe { nix_alloc_value(ctx, state.state) })?;
+        Ok(Self { ctx, value })
     }
 
-    pub(crate) unsafe fn from_raw(value: *mut nixrs_sys::Value) -> Value {
-        Value {
+    unsafe fn from_raw(value: *mut nixrs_sys::Value) -> Self {
+        Self {
             ctx: Context::new(),
             value,
         }
     }
 
     pub fn get_type(&self) -> Result<ValueType> {
-        let ty = unsafe {
-            let ty = nix_get_type(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            ty
-        };
+        let ty = self
+            .ctx
+            .exec(|ctx| unsafe { nix_get_type(ctx, self.value) })?;
         ValueType::from_raw(ty)
     }
 
     pub fn force(&mut self, state: &State) -> Result<()> {
-        unsafe {
-            nix_value_force(self.ctx.ctx, state.state, self.value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_value_force(ctx, state.state, self.value);
+        })
     }
 
     pub fn force_deep(&mut self, state: &State) -> Result<()> {
-        unsafe {
-            nix_value_force_deep(self.ctx.ctx, state.state, self.value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_value_force_deep(ctx, state.state, self.value);
+        })
     }
 
     pub fn init_thunk(&mut self, f: &Value, arg: &Value) -> Result<()> {
-        unsafe {
-            nix_init_apply(self.ctx.ctx, self.value, f.value, arg.value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_apply(ctx, self.value, f.value, arg.value);
+        })
     }
 
     pub fn init_int(&mut self, value: i64) -> Result<()> {
-        unsafe {
-            nix_init_int(self.ctx.ctx, self.value, value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_int(ctx, self.value, value);
+        })
     }
 
     pub fn init_float(&mut self, value: f64) -> Result<()> {
-        unsafe {
-            nix_init_float(self.ctx.ctx, self.value, value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_float(ctx, self.value, value);
+        })
     }
 
     pub fn init_bool(&mut self, value: bool) -> Result<()> {
-        unsafe {
-            nix_init_bool(self.ctx.ctx, self.value, value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_bool(ctx, self.value, value);
+        })
     }
 
     pub fn init_string(&mut self, value: &str) -> Result<()> {
-        let value = CString::new(value).map_err(|_| NixRSError::UnknownError)?;
-        unsafe {
-            nix_init_string(self.ctx.ctx, self.value, value.as_ptr());
-            self.ctx.check()?;
-        };
+        let value = CString::new(value).map_err(|_| Error::UnknownError)?;
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_string(ctx, self.value, value.as_ptr());
+        })?;
         drop(value);
         Ok(())
     }
 
     pub fn init_path(&mut self, state: &State, value: &str) -> Result<()> {
-        let value = CString::new(value).map_err(|_| NixRSError::UnknownError)?;
-        unsafe {
-            nix_init_path_string(self.ctx.ctx, state.state, self.value, value.as_ptr());
-            self.ctx.check()?;
-        };
+        let value = CString::new(value).map_err(|_| Error::UnknownError)?;
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_path_string(ctx, state.state, self.value, value.as_ptr());
+        })?;
         drop(value);
         Ok(())
     }
 
     pub fn init_null(&mut self) -> Result<()> {
-        unsafe {
-            nix_init_null(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-        };
-        Ok(())
+        self.ctx.exec(|ctx| unsafe {
+            nix_init_null(ctx, self.value);
+        })
     }
 
     pub fn init_attrs(&mut self, state: &State, values: HashMap<String, &Value>) -> Result<()> {
-        unsafe {
-            let builder = nix_make_bindings_builder(self.ctx.ctx, state.state, values.len());
-            self.ctx.check()?;
-            for (name, value) in values {
-                let name = match CString::new(name) {
-                    Ok(name) => name,
-                    Err(_) => {
-                        nix_bindings_builder_free(builder);
-                        return Err(NixRSError::UnknownError);
-                    }
-                };
-                nix_bindings_builder_insert(self.ctx.ctx, builder, name.as_ptr(), value.value);
-                drop(name);
-                if let err @ Err(_) = self.ctx.check() {
+        let builder = self
+            .ctx
+            .exec(|ctx| unsafe { nix_make_bindings_builder(ctx, state.state, values.len()) })?;
+        for (name, value) in values {
+            unsafe {
+                let Ok(name) = CString::new(name) else {
                     nix_bindings_builder_free(builder);
-                    return err;
+                    return Err(Error::UnknownError);
+                };
+                let result = self.ctx.exec(|ctx| {
+                    nix_bindings_builder_insert(ctx, builder, name.as_ptr(), value.value);
+                });
+                drop(name);
+                if let Err(err) = result {
+                    nix_bindings_builder_free(builder);
+                    return Err(err);
                 }
             }
-            nix_make_attrs(self.ctx.ctx, self.value, builder);
-            nix_bindings_builder_free(builder);
-            self.ctx.check()?;
-        };
-        Ok(())
+        }
+        self.ctx.exec(|ctx| unsafe {
+            nix_make_attrs(ctx, self.value, builder);
+            nix_bindings_builder_free(builder)
+        })
     }
 
     pub fn init_list(&mut self, state: &State, values: &[&Value]) -> Result<()> {
-        unsafe {
-            let builder = nix_make_list_builder(self.ctx.ctx, state.state, values.len());
-            self.ctx.check()?;
-            for (i, value) in values.iter().enumerate() {
-                nix_list_builder_insert(self.ctx.ctx, builder, i as u32, value.value);
-                if let err @ Err(_) = self.ctx.check() {
-                    nix_list_builder_free(builder);
-                    return err;
-                }
-            }
-            nix_make_list(self.ctx.ctx, builder, self.value);
+        let builder = self
+            .ctx
+            .exec(|ctx| unsafe { nix_make_list_builder(ctx, state.state, values.len()) })?;
+        for (i, value) in values.iter().enumerate() {
+            self.ctx
+                .exec(|ctx| unsafe {
+                    nix_list_builder_insert(ctx, builder, i as u32, value.value);
+                })
+                .map_err(|err| {
+                    unsafe {
+                        nix_list_builder_free(builder);
+                    }
+                    err
+                })?
+        }
+        self.ctx.exec(|ctx| unsafe {
+            nix_make_list(ctx, builder, self.value);
             nix_list_builder_free(builder);
-            self.ctx.check()?;
-        };
-        Ok(())
+        })
     }
 
     // TODO: function and external
 
     pub fn int(&self) -> Result<i64> {
-        let int = unsafe {
-            let int = nix_get_int(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            int
-        };
-        Ok(int)
+        self.ctx.exec(|ctx| unsafe { nix_get_int(ctx, self.value) })
     }
 
     pub fn float(&self) -> Result<f64> {
-        let float = unsafe {
-            let float = nix_get_float(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            float
-        };
-        Ok(float)
+        self.ctx
+            .exec(|ctx| unsafe { nix_get_float(ctx, self.value) })
     }
 
     pub fn bool(&self) -> Result<bool> {
-        let bool = unsafe {
-            let bool = nix_get_bool(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            bool
-        };
-        Ok(bool)
+        self.ctx
+            .exec(|ctx| unsafe { nix_get_bool(ctx, self.value) })
     }
 
     pub fn string(&self) -> Result<String> {
-        let string = unsafe {
-            let mut vec: Vec<u8> = Vec::new();
+        let mut vec: Vec<u8> = Vec::new();
+        self.ctx.exec(|ctx| unsafe {
             nix_get_string(
-                self.ctx.ctx,
+                ctx,
                 self.value,
                 Some(get_string_cb),
                 &mut vec as *mut _ as *mut _,
             );
-            self.ctx.check()?;
-            String::from_utf8(vec).map_err(|_| NixRSError::UnknownError)?
-        };
+        })?;
+        let string = String::from_utf8(vec).map_err(|_| Error::UnknownError)?;
         Ok(string)
     }
 
     pub fn path(&self) -> Result<String> {
-        let path = unsafe {
-            let path = nix_get_path_string(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            string_from_c(path)?
-        };
+        let path = self
+            .ctx
+            .exec(|ctx| unsafe { nix_get_path_string(ctx, self.value) })?;
+        let path = unsafe { string_from_c(path)? };
         Ok(path)
     }
 
     pub fn attrs_len(&self) -> Result<usize> {
-        let size = unsafe {
-            let size = nix_get_attrs_size(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            size as usize
-        };
-        Ok(size)
+        let size = self
+            .ctx
+            .exec(|ctx| unsafe { nix_get_attrs_size(ctx, self.value) })?;
+        Ok(size as usize)
     }
 
-    pub fn attrs_get(&self, state: &State, name: &str) -> Result<Value> {
-        let value = unsafe {
-            let name = CString::new(name).map_err(|_| NixRSError::UnknownError)?;
-            let value = nix_get_attr_byname(self.ctx.ctx, self.value, state.state, name.as_ptr());
-            drop(name);
-            self.ctx.check()?;
-            Value::from_raw(value)
-        };
+    pub fn attrs_get(&self, state: &State, name: &str) -> Result<Self> {
+        let name = CString::new(name).map_err(|_| Error::UnknownError)?;
+        let value = self.ctx.exec(|ctx| unsafe {
+            let value = nix_get_attr_byname(ctx, self.value, state.state, name.as_ptr());
+            Self::from_raw(value)
+        })?;
+        drop(name);
         Ok(value)
     }
 
-    pub fn attrs_get_byid(&self, state: &State, id: usize) -> Result<(String, Value)> {
-        let value = unsafe {
+    pub fn attrs_get_byid(&self, state: &State, id: usize) -> Result<(String, Self)> {
+        let (name, value) = self.ctx.exec(|ctx| unsafe {
             let mut name: *const libc::c_char = null_mut();
             let value = nix_get_attr_byidx(
-                self.ctx.ctx,
+                ctx,
                 self.value,
                 state.state,
                 id as u32,
                 &mut name as *mut *const _,
             );
-            self.ctx.check()?;
-            (string_from_c(name)?, Value::from_raw(value))
-        };
-        Ok(value)
+            (string_from_c(name), Self::from_raw(value))
+        })?;
+        Ok((name?, value))
     }
 
     pub fn list_len(&self) -> Result<usize> {
-        let size = unsafe {
-            let size = nix_get_list_size(self.ctx.ctx, self.value);
-            self.ctx.check()?;
-            size as usize
-        };
-        Ok(size)
+        let size = self
+            .ctx
+            .exec(|ctx| unsafe { nix_get_list_size(ctx, self.value) })?;
+        Ok(size as usize)
     }
 
-    pub fn list_get(&self, state: &State, id: usize) -> Result<Value> {
-        let value = unsafe {
-            let value = nix_get_list_byidx(self.ctx.ctx, self.value, state.state, id as u32);
-            self.ctx.check()?;
-            Value::from_raw(value)
-        };
-        Ok(value)
+    pub fn list_get(&self, state: &State, id: usize) -> Result<Self> {
+        let value = self
+            .ctx
+            .exec(|ctx| unsafe { nix_get_list_byidx(ctx, self.value, state.state, id as u32) })?;
+        Ok(unsafe { Self::from_raw(value) })
     }
 
     // TODO: apply
